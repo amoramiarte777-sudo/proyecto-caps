@@ -1,0 +1,586 @@
+{
+  "name": "CAPS - Prospección B2B Automática Cartagena",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "0a39fa3d-52f0-4deb-b0ea-9cc27e9e8acb",
+      "name": "Disparador 8AM L-V",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        80,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1VvGsyyyVhFh6jKD2H97PGDwZsXTvPQH-2lGCw3Dp2RY",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Prospectos",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "bcd6123e-b636-458e-b429-29a2117c2bf9",
+      "name": "Leer Historial CRM",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        320,
+        -48
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "4aQlqG7UZo9mOcsi",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const sectores = [\n  { sector: 'Colegio', query: 'colegios en Cartagena' },\n  { sector: 'Clínica', query: 'clínicas en Cartagena' },\n  { sector: 'Hospital', query: 'hospitales en Cartagena' },\n  { sector: 'Administración de Edificios', query: 'administración de edificios en Cartagena' },\n  { sector: 'Empresa', query: 'empresas en Cartagena' }\n];\n\nreturn sectores.map(s => ({ json: s }));"
+      },
+      "id": "7295863b-839d-4af7-9878-95da3a3f9e67",
+      "name": "Definir Términos de Búsqueda",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        544,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://places.googleapis.com/v1/places:searchText",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Goog-FieldMask",
+              "value": "places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.internationalPhoneNumber,places.websiteUri,places.id"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"textQuery\": $json.query, \"languageCode\": \"es\" } }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 500
+            }
+          }
+        }
+      },
+      "id": "264a6a59-1bb3-4842-a86f-030b40ee5c5e",
+      "name": "Buscar en Google Places",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        784,
+        -48
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "n74e9UbiEhPZ4sQq",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const queries = $('Definir Términos de Búsqueda').all();\nconst respuestas = $input.all();\nconst salida = [];\n\nfor (let i = 0; i < respuestas.length; i++) {\n  const sector = queries[i]?.json?.sector || '';\n  const places = respuestas[i].json.places || [];\n  for (const p of places) {\n    salida.push({\n      json: {\n        sector,\n        nombre: p.displayName?.text || '',\n        direccion: p.formattedAddress || '',\n        telefono: p.internationalPhoneNumber || p.nationalPhoneNumber || '',\n        sitioWeb: p.websiteUri || ''\n      }\n    });\n  }\n}\n\nreturn salida;"
+      },
+      "id": "6f5a2799-7e53-463e-8909-4592b739548d",
+      "name": "Extraer Lugares",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1008,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-website",
+              "leftValue": "={{$json.sitioWeb}}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "51f34e82-bf52-4724-9fa3-2259b360db61",
+      "name": "Con Sitio Web",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [
+        1232,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.sitioWeb}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (compatible; CAPS-Bot/1.0; +https://www.electronicaysistemas.co)"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 800
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "62fc498e-359d-421e-a510-43d12be6bb1e",
+      "name": "Descargar Sitio Web",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1472,
+        -48
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const previos = $('Con Sitio Web').all();\nconst respuestas = $input.all();\nconst resultados = [];\n\nfor (let i = 0; i < respuestas.length; i++) {\n  const raw = respuestas[i].json.data || respuestas[i].json.body || '';\n  const texto = typeof raw === 'string' ? raw : JSON.stringify(raw);\n  const encontrados = texto.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/g) || [];\n  const excluidos = /\\.(png|jpg|jpeg|gif|svg|webp|css|js)$/i;\n  const validos = [...new Set(encontrados.filter(e => !excluidos.test(e)))];\n\n  resultados.push({\n    json: {\n      ...previos[i].json,\n      email: validos[0] || null\n    }\n  });\n}\n\nreturn resultados;"
+      },
+      "id": "3e0fe40b-3b42-49e2-84fa-bd024394bf36",
+      "name": "Extraer Email del Sitio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1696,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const historial = $('Leer Historial CRM').all()\n  .map(i => String(i.json.Email || i.json.email || '').toLowerCase().trim())\n  .filter(Boolean);\n\nconst vistos = new Set();\nconst nuevos = [];\n\nfor (const item of $input.all()) {\n  const email = String(item.json.email || '').toLowerCase().trim();\n  if (!email) continue;\n  if (historial.includes(email)) continue;\n  if (vistos.has(email)) continue;\n  vistos.add(email);\n  nuevos.push({ json: item.json });\n}\n\nreturn nuevos;"
+      },
+      "id": "61094511-dba3-471f-b50f-a8cf503a25e9",
+      "name": "Filtrar Nuevos y Válidos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "maxItems": 7
+      },
+      "id": "56969921-ea89-447f-8e74-90d7a09c4c80",
+      "name": "Límite Diario de Envíos",
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 400, system: \"Eres el redactor de correos B2B de CAPS, la marca profesional de Cesar Pestana: técnico especialista con 26 años de experiencia en reparación de televisores, computadores y redes, y estudiante de Ingeniería de Sistemas, con base en Cartagena, Colombia. Escribes correos de prospección MUY cortos (máximo 100 palabras), directos y persuasivos: frases cortas, sin rodeos ni relleno, tono seguro y cercano. Debes: (1) mencionar el nombre de la institución, (2) abrir con un gancho breve que combine tus 26 años reparando televisores, computadores, equipos audiovisuales y redes, respaldado por tu formación en Ingeniería de Sistemas, (3) en una sola frase conectar esa experiencia con una necesidad concreta del sector indicado (colegios: salas de cómputo y redes; clínicas/hospitales: equipos informáticos y continuidad operativa; edificios: redes y videovigilancia; empresas: soporte TI integral), (4) cerrar con un llamado a la acción corto invitando a escribir por correo o WhatsApp para conversar. NO agregues firma, despedida formal ni tu nombre al final del cuerpo -el correo ya incluye una firma automática con tu información-, termina directo en el llamado a la acción. Deja claro que es un servicio profesional con costo, sin mencionar cifras ni ofrecer nada gratis. Ve directo al punto, sin repetir ideas. Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional ni markdown, con las claves 'asunto' y 'cuerpo' (cuerpo en texto plano, usa \\\\n para saltos de línea).\", messages: [ { role: 'user', content: 'Institución: ' + $json.nombre + '\\nSector: ' + $json.sector + '\\nDirección: ' + $json.direccion + '\\nCiudad: Cartagena, Colombia.' } ] }) }}",
+        "options": {}
+      },
+      "id": "95765bb9-fbf6-44c4-9ffa-f7af1acaaacf",
+      "name": "Generar Propuesta con Claude",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2384,
+        -48
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mBXFsWoG020Qhka5",
+          "name": "Header Auth account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const previos = $('Límite Diario de Envíos').all();\nconst respuestas = $input.all();\nconst resultados = [];\n\nfor (let i = 0; i < respuestas.length; i++) {\n  let asunto = 'Propuesta de servicio técnico - CAPS';\n  let cuerpo = '';\n  try {\n    const bloque = respuestas[i].json.content.find(b => b.type === 'text');\n    const texto = bloque ? bloque.text : '';\n    const limpio = texto.replace(/```json|```/g, '').trim();\n    const datos = JSON.parse(limpio);\n    asunto = datos.asunto || asunto;\n    cuerpo = datos.cuerpo || '';\n  } catch (e) {\n    cuerpo = '';\n  }\n\n  if (!cuerpo || !cuerpo.trim()) {\n    continue;\n  }\n\n  const parrafosHtml = cuerpo\n    .split(/\\n\\s*\\n/)\n    .map(p => `<p style=\"margin:0 0 16px 0;\">${p.replace(/\\n/g, '<br>')}</p>`)\n    .join('');\n\n  const cuerpoHtml = `\n  <div style=\"font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 0 auto; background-color:#ffffff; border:1px solid #e2e6ea; border-radius:8px; overflow:hidden;\">\n    <div style=\"background-color:#0f2942; padding:24px 32px;\">\n      <div style=\"color:#ffffff; font-size:20px; font-weight:bold; letter-spacing:1px;\">ELECTRÓNICA &amp; SISTEMAS</div>\n      <div style=\"color:#9fb8d1; font-size:12px; margin-top:2px;\">Servicio Técnico Profesional · TRANSFORMACIÓN.COM</div>\n    </div>\n    <div style=\"padding:32px; color:#1f2d3d; font-size:15px; line-height:1.6;\">\n      ${parrafosHtml}\n    </div>\n    <div style=\"background-color:#f4f6f8; padding:20px 32px; border-top:3px solid #0f2942;\">\n      <div style=\"font-weight:bold; color:#0f2942; font-size:14px;\">Cesar Pestana</div>\n      <div style=\"color:#4a5a6a; font-size:13px;\">Técnico especialista · 26 años de experiencia · Estudiante de Ingeniería de Sistemas</div>\n      <div style=\"margin-top:10px; font-size:13px;\">\n        <a href=\"https://wa.me/573163392695\" style=\"color:#0f2942; text-decoration:none; font-weight:bold;\">WhatsApp: +57 316 339 2695</a>\n      </div>\n      <div style=\"margin-top:6px; font-size:13px;\">\n        <a href=\"https://landing.pestanatech.com/transformacion-es\" style=\"color:#0f2942; text-decoration:none; font-weight:bold;\">Ver todos mis servicios</a>\n      </div>\n      <div style=\"color:#8a97a3; font-size:11px; margin-top:10px;\">Cartagena de Indias, Colombia</div>\n    </div>\n  </div>`;\n\n  resultados.push({\n    json: {\n      ...previos[i].json,\n      asuntoCorreo: asunto,\n      cuerpoCorreo: cuerpo,\n      cuerpoCorreoHtml: cuerpoHtml\n    }\n  });\n}\n\nreturn resultados;"
+      },
+      "id": "10ebb137-c263-4bdb-8a29-90e78cac8fea",
+      "name": "Preparar Correo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2624,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{$json.email}}",
+        "subject": "={{$json.asuntoCorreo}}",
+        "message": "={{$json.cuerpoCorreoHtml}}",
+        "options": {}
+      },
+      "id": "bba65d60-ab73-4113-b6d2-10919765b0c1",
+      "name": "Enviar Propuesta",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2848,
+        -48
+      ],
+      "webhookId": "a5c8812f-9d95-4ce8-b81f-9fafa1c9c908",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "HpGeXA8ggqX9oobP",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1VvGsyyyVhFh6jKD2H97PGDwZsXTvPQH-2lGCw3Dp2RY",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Prospectos",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Fecha": "={{$now.toFormat('yyyy-MM-dd')}}",
+            "Empresa": "={{$('Preparar Correo').item.json.nombre}}",
+            "Sector": "={{$('Preparar Correo').item.json.sector}}",
+            "Email": "={{$('Preparar Correo').item.json.email}}",
+            "Telefono": "={{ \"'\" + $('Preparar Correo').item.json.telefono }}",
+            "SitioWeb": "={{$('Preparar Correo').item.json.sitioWeb}}",
+            "Estado": "Enviado"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Fecha",
+              "displayName": "Fecha",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Empresa",
+              "displayName": "Empresa",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Sector",
+              "displayName": "Sector",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Telefono",
+              "displayName": "Telefono",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "SitioWeb",
+              "displayName": "SitioWeb",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Estado",
+              "displayName": "Estado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "d16c30cf-60ec-4b91-aba5-9b1961853f46",
+      "name": "Registrar Envío en CRM",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        3072,
+        -48
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "4aQlqG7UZo9mOcsi",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Disparador 8AM L-V": {
+      "main": [
+        [
+          {
+            "node": "Leer Historial CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer Historial CRM": {
+      "main": [
+        [
+          {
+            "node": "Definir Términos de Búsqueda",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Definir Términos de Búsqueda": {
+      "main": [
+        [
+          {
+            "node": "Buscar en Google Places",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar en Google Places": {
+      "main": [
+        [
+          {
+            "node": "Extraer Lugares",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer Lugares": {
+      "main": [
+        [
+          {
+            "node": "Con Sitio Web",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Con Sitio Web": {
+      "main": [
+        [
+          {
+            "node": "Descargar Sitio Web",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Descargar Sitio Web": {
+      "main": [
+        [
+          {
+            "node": "Extraer Email del Sitio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer Email del Sitio": {
+      "main": [
+        [
+          {
+            "node": "Filtrar Nuevos y Válidos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar Nuevos y Válidos": {
+      "main": [
+        [
+          {
+            "node": "Límite Diario de Envíos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Límite Diario de Envíos": {
+      "main": [
+        [
+          {
+            "node": "Generar Propuesta con Claude",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar Propuesta con Claude": {
+      "main": [
+        [
+          {
+            "node": "Preparar Correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Correo": {
+      "main": [
+        [
+          {
+            "node": "Enviar Propuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Propuesta": {
+      "main": [
+        [
+          {
+            "node": "Registrar Envío en CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": {
+    "node:Disparador 8AM L-V": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    }
+  },
+  "pinData": {},
+  "triggerCount": 1,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}
