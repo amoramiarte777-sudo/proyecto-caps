@@ -2,6 +2,3 @@ fastapi
 uvicorn
 crewai
 python-dotenv
-litellm
-pydantic
-gunicorn
